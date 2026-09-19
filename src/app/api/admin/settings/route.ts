@@ -1,0 +1,7 @@
+import {NextRequest,NextResponse} from "next/server";
+import {prisma} from "@/lib/db";
+import {requireAdmin} from "@/lib/auth";
+import {z} from "zod";
+const schema=z.object({zappay_enabled:z.boolean(),cod_enabled:z.boolean(),cod_min_order:z.number().finite().min(0),cod_max_order:z.number().finite().min(0)}).refine(x=>x.cod_min_order<=x.cod_max_order,{message:"Invalid COD range"});
+export async function GET(req:NextRequest){try{await requireAdmin(req)}catch(e){if(e instanceof Response)return e;throw e}const rows=await prisma.setting.findMany();const m=Object.fromEntries(rows.map(x=>[x.key,x.value]));return NextResponse.json({zappay_enabled:(m.zappay_enabled??"true")==="true",cod_enabled:(m.cod_enabled??"true")==="true",cod_min_order:Number(m.cod_min_order??0),cod_max_order:Number(m.cod_max_order??50000),zappay_status:process.env.ZAP_API_KEY?"configured":"not_configured",payment_mode:process.env.PAYMENT_MODE==="live"?"live":"test"})}
+export async function PUT(req:NextRequest){try{await requireAdmin(req)}catch(e){if(e instanceof Response)return e;throw e}const x=schema.safeParse(await req.json().catch(()=>null));if(!x.success)return NextResponse.json({error:"Invalid settings"},{status:400});for(const [key,value] of Object.entries(x.data))await prisma.setting.upsert({where:{key},create:{key,value:String(value)},update:{value:String(value)}});return NextResponse.json({success:true})}
